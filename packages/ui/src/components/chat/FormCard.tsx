@@ -11,6 +11,7 @@ import { useUIStore } from '@/stores/useUIStore';
 import { useChatSessionSelection } from './chatColumnSession';
 import { useSessions } from '@/sync/sync-context';
 import * as sessionActions from '@/sync/session-actions';
+import { isFormRequestNotFoundError } from '@/sync/form-request-error';
 import { useI18n } from '@/lib/i18n';
 import { copyTextToClipboard } from '@/lib/clipboard';
 import { serializeFormAsJson, serializeFormAsMarkdown } from './formSerializers';
@@ -61,6 +62,7 @@ const GenericFormCard: React.FC<FormCardProps> = ({ form }) => {
     // from the start and its acknowledgement travels with the reply.
     const [values, setValues] = React.useState<FormValues>(() => initialFormValues(fields, { acknowledgeExternal: true }));
     const [isResponding, setIsResponding] = React.useState(false);
+    const respondingRef = React.useRef(false);
     const [hasResponded, setHasResponded] = React.useState(false);
     const [showErrors, setShowErrors] = React.useState(false);
 
@@ -86,29 +88,45 @@ const GenericFormCard: React.FC<FormCardProps> = ({ form }) => {
     }, []);
 
     const handleSubmit = React.useCallback(async () => {
+        if (respondingRef.current) return;
         if (!canSubmit) {
             setShowErrors(true);
             return;
         }
+        respondingRef.current = true;
         setIsResponding(true);
         try {
             await sessionActions.replyToForm(form.sessionID, form.id, buildFormAnswer(fields, values));
             setHasResponded(true);
-        } catch {
+        } catch (error) {
+            // A second Enter, or a reply the server already accepted, comes back
+            // as not-found. The card is gone; "try again" cannot succeed.
+            if (isFormRequestNotFoundError(error)) {
+                setHasResponded(true);
+                return;
+            }
             toast.error(t('chat.formCard.submitFailed'), { description: t('chat.formCard.tryAgain') });
         } finally {
+            respondingRef.current = false;
             setIsResponding(false);
         }
     }, [canSubmit, fields, form.id, form.sessionID, t, values]);
 
     const handleCancel = React.useCallback(async () => {
+        if (respondingRef.current) return;
+        respondingRef.current = true;
         setIsResponding(true);
         try {
             await sessionActions.cancelForm(form.sessionID, form.id);
             setHasResponded(true);
-        } catch {
+        } catch (error) {
+            if (isFormRequestNotFoundError(error)) {
+                setHasResponded(true);
+                return;
+            }
             toast.error(t('chat.formCard.cancelFailed'), { description: t('chat.formCard.tryAgain') });
         } finally {
+            respondingRef.current = false;
             setIsResponding(false);
         }
     }, [form.id, form.sessionID, t]);

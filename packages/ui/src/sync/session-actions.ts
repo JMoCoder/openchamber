@@ -50,6 +50,7 @@ import { markSessionUnreadSeen } from "./session-unread"
 import { getRuntimeKey } from "@/lib/runtime-switch"
 import { isRelayModeActive } from "@/lib/relay/runtime-tunnel"
 import { getErrorStatus, isAmbiguousSendFailure } from "./send-failure-classification"
+import { isFormRequestNotFoundError } from "./form-request-error"
 import { getStaleRunningToolMessageID } from "./materialization"
 import { promoteRestoredSessionOrdering } from "./session-ordering"
 import { normalizePath } from "@/lib/pathNormalization"
@@ -808,21 +809,11 @@ function resolveDirectoryForBlockingRequest(
   return null
 }
 
-function isFormRequestNotFoundError(error: unknown): boolean {
-  if (error && typeof error === "object") {
-    const status = (error as { status?: unknown }).status
-    if (status === 404) return true
-  }
-
-  let message = ""
-  if (error instanceof Error) {
-    message = error.message
-  } else if (typeof error === "string") {
-    message = error
-  }
-
-  return /Form(?:\.)?NotFoundError|Form request not found/i.test(message)
-}
+/**
+ * Re-exported so form cards can tell "already settled" from a real failure.
+ * A not-found reply must not be toasted as "try again": the form is gone.
+ */
+export { isFormRequestNotFoundError } from "./form-request-error"
 
 /**
  * Reconcile the trailing assistant tool part after a blocking request turned
@@ -2452,6 +2443,8 @@ export async function replyToForm(
       removeFormRequestFromChildStores(sessionId, formId)
       recoverStaleBlockingRequest(sessionId)
     }
+    // Still thrown. Callers must use isFormRequestNotFoundError and must not
+    // toast it as a retryable submit failure: the form is already gone.
     throw error
   }
 }
@@ -2471,6 +2464,7 @@ export async function cancelForm(sessionId: string, formId: string): Promise<voi
       removeFormRequestFromChildStores(sessionId, formId)
       recoverStaleBlockingRequest(sessionId)
     }
+    // Same as replyToForm: not-found is already settled, not a retryable cancel.
     throw error
   }
 }

@@ -16,6 +16,7 @@ import { useScopedBlockingForms, useSessions } from '@/sync/sync-context';
 import { useRequestReveal } from '@/sync/request-reveal';
 import { useChatSessionSelection } from './chatColumnSession';
 import * as sessionActions from '@/sync/session-actions';
+import { isFormRequestNotFoundError } from '@/sync/form-request-error';
 import { useMobileAutocompleteMaxHeight } from './useMobileAutocompleteMaxHeight';
 import { FormFieldControl } from './FormFieldControl';
 import { WebSearchConsentDock } from './WebSearchConsent';
@@ -119,6 +120,7 @@ const FormDockPanel: React.FC<{ form: FormRequest; forms: FormRequest[] }> = ({ 
     const [step, setStep] = React.useState(restored?.step ?? 0);
     const [collapsed, setCollapsed] = React.useState(false);
     const [isResponding, setIsResponding] = React.useState(false);
+    const respondingRef = React.useRef(false);
     const [showErrors, setShowErrors] = React.useState(false);
     const waiting = forms.length - 1;
     // "Open session" on a question's toast expands the dock, including for a
@@ -180,6 +182,7 @@ const FormDockPanel: React.FC<{ form: FormRequest; forms: FormRequest[] }> = ({ 
     }, [currentFieldIsExternal, currentFieldKey]);
 
     const handleSubmit = React.useCallback(async () => {
+        if (respondingRef.current) return;
         if (!canSubmit) {
             // Jump to the first question that still needs an answer.
             setShowErrors(true);
@@ -187,25 +190,40 @@ const FormDockPanel: React.FC<{ form: FormRequest; forms: FormRequest[] }> = ({ 
             if (firstMissing >= 0) setStep(firstMissing);
             return;
         }
+        respondingRef.current = true;
         setIsResponding(true);
         try {
             await sessionActions.replyToForm(form.sessionID, form.id, buildFormAnswer(fields, values));
             formDrafts.delete(form.id);
-        } catch {
+        } catch (error) {
+            // Custom-answer Enter can submit twice. The second call, or a reply
+            // the server already accepted, is not-found. Retry cannot succeed.
+            if (isFormRequestNotFoundError(error)) {
+                formDrafts.delete(form.id);
+                return;
+            }
             toast.error(t('chat.formCard.submitFailed'), { description: t('chat.formCard.tryAgain') });
         } finally {
+            respondingRef.current = false;
             setIsResponding(false);
         }
     }, [canSubmit, fields, form.id, form.sessionID, missing, shown, t, values]);
 
     const handleDismiss = React.useCallback(async () => {
+        if (respondingRef.current) return;
+        respondingRef.current = true;
         setIsResponding(true);
         try {
             await sessionActions.cancelForm(form.sessionID, form.id);
             formDrafts.delete(form.id);
-        } catch {
+        } catch (error) {
+            if (isFormRequestNotFoundError(error)) {
+                formDrafts.delete(form.id);
+                return;
+            }
             toast.error(t('chat.formCard.cancelFailed'), { description: t('chat.formCard.tryAgain') });
         } finally {
+            respondingRef.current = false;
             setIsResponding(false);
         }
     }, [form.id, form.sessionID, t]);

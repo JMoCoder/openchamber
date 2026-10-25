@@ -6,6 +6,7 @@ import { useI18n } from '@/lib/i18n';
 import type { FormRequest } from '@/lib/opencode/model';
 import type { WebSearchConsent, WebSearchConsentOption } from '@/lib/opencode/websearch';
 import * as sessionActions from '@/sync/session-actions';
+import { isFormRequestNotFoundError } from '@/sync/form-request-error';
 import { useSessions } from '@/sync/sync-context';
 import { ComposerFloatingPanel } from './composer/ui/ComposerFloatingPanel';
 
@@ -39,25 +40,34 @@ const CHOICE_VARIANTS = {
 function useConsentReply(form: FormRequest, consent: WebSearchConsent) {
     const { t } = useI18n();
     const [pending, setPending] = React.useState(false);
+    const pendingRef = React.useRef(false);
 
     const answer = React.useCallback(async (value: string) => {
+        if (pendingRef.current) return;
+        pendingRef.current = true;
         setPending(true);
         try {
             await sessionActions.replyToForm(form.sessionID, form.id, { [consent.fieldKey]: value });
-        } catch {
+        } catch (error) {
+            if (isFormRequestNotFoundError(error)) return;
             toast.error(t('chat.formCard.submitFailed'), { description: t('chat.formCard.tryAgain') });
         } finally {
+            pendingRef.current = false;
             setPending(false);
         }
     }, [consent.fieldKey, form.id, form.sessionID, t]);
 
     const dismiss = React.useCallback(async () => {
+        if (pendingRef.current) return;
+        pendingRef.current = true;
         setPending(true);
         try {
             await sessionActions.cancelForm(form.sessionID, form.id);
-        } catch {
+        } catch (error) {
+            if (isFormRequestNotFoundError(error)) return;
             toast.error(t('chat.formCard.cancelFailed'), { description: t('chat.formCard.tryAgain') });
         } finally {
+            pendingRef.current = false;
             setPending(false);
         }
     }, [form.id, form.sessionID, t]);
