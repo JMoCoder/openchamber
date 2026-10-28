@@ -99,8 +99,7 @@ const GenericFormCard: React.FC<FormCardProps> = ({ form }) => {
             await sessionActions.replyToForm(form.sessionID, form.id, buildFormAnswer(fields, values));
             setHasResponded(true);
         } catch (error) {
-            // A second Enter, or a reply the server already accepted, comes back
-            // as not-found. The card is gone; "try again" cannot succeed.
+            // The store removes not-found requests, so no card remains to retry.
             if (isFormRequestNotFoundError(error)) {
                 setHasResponded(true);
                 return;

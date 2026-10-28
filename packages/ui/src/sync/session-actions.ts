@@ -810,12 +810,6 @@ function resolveDirectoryForBlockingRequest(
 }
 
 /**
- * Re-exported so form cards can tell "already settled" from a real failure.
- * A not-found reply must not be toasted as "try again": the form is gone.
- */
-export { isFormRequestNotFoundError } from "./form-request-error"
-
-/**
  * Reconcile the trailing assistant tool part after a blocking request turned
  * out to be stale server-side (reply/reject answered with not-found). The
  * local request is removed (the server no longer tracks it), but the

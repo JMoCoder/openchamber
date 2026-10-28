@@ -196,8 +196,7 @@ const FormDockPanel: React.FC<{ form: FormRequest; forms: FormRequest[] }> = ({ 
             await sessionActions.replyToForm(form.sessionID, form.id, buildFormAnswer(fields, values));
             formDrafts.delete(form.id);
         } catch (error) {
-            // Custom-answer Enter can submit twice. The second call, or a reply
-            // the server already accepted, is not-found. Retry cannot succeed.
+            // The store removes not-found requests, so no form remains to retry.
             if (isFormRequestNotFoundError(error)) {
                 formDrafts.delete(form.id);
                 return;
