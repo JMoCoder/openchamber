@@ -4202,7 +4202,7 @@ export const useConfigStore = create<ConfigStore>()(
                                     configDirectory,
                                 });
                                 opencodeClient.setDirectory(configDirectory);
-                                useDirectoryStore.getState().setDirectory(configDirectory, { showOverlay: false });
+                                useDirectoryStore.getState().setDirectory(configDirectory, { showOverlay: false, source: 'bootstrap' });
                             }
                             const configDirectoryKey = toDirectoryKey(configDirectory);
                             if (get().activeDirectoryKey !== configDirectoryKey) {

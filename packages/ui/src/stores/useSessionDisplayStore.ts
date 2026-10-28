@@ -131,6 +131,9 @@ export const resolveSidebarGrouping = (
 ): ListSessionGrouping => state.sidebarGrouping
   ?? (state.sidebarViewMode === 'timeline' && state.listSessionGrouping === 'time' ? 'time' : 'project');
 
+let sidebarProjectNavigationRevision = 0;
+export const getSidebarProjectNavigationRevision = () => sidebarProjectNavigationRevision;
+
 export const useSessionDisplayStore = create<SessionDisplayStore>()(
   persist(
     (set) => ({
@@ -139,7 +142,10 @@ export const useSessionDisplayStore = create<SessionDisplayStore>()(
       projectDisplayMode: 'all',
       singleProjectId: null,
       setProjectDisplayMode: (mode) => set({ projectDisplayMode: mode }),
-      setSingleProjectId: (projectId) => set({ singleProjectId: projectId }),
+      setSingleProjectId: (projectId) => {
+        sidebarProjectNavigationRevision += 1;
+        set({ singleProjectId: projectId });
+      },
       // New installs start on the timeline. Stored state keeps an earlier
       // choice, and VS Code always renders the grouped view.
       sidebarViewMode: 'timeline',

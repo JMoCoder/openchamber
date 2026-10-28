@@ -3,6 +3,11 @@ import { GLOBAL_EVENT_DIRECTORY, type SyncEvent } from "@/lib/opencode/events"
 import type { Message, Part, Session } from "@/lib/opencode/model"
 import { getRuntimeKey } from "@/lib/runtime-switch"
 import { useGlobalSessionsStore } from "@/stores/useGlobalSessionsStore"
+import { useProjectsStore } from "@/stores/useProjectsStore"
+import { useDirectoryStore } from "@/stores/useDirectoryStore"
+import { useSessionDisplayStore } from "@/stores/useSessionDisplayStore"
+import { opencodeClient } from "@/lib/opencode/client"
+import { useSessionUIStore } from "../session-ui-store"
 import { ChildStoreManager } from "../child-store"
 import { setActionRefs } from "../session-actions"
 import { SessionMessageLoader, setImperativeSessionMessageLoader } from "../session-message-loader"
@@ -66,6 +71,102 @@ function setup() {
 const settle = () => new Promise((resolve) => setTimeout(resolve, 0))
 
 describe("session.moved", () => {
+  test("updates an unopened background session without creating directory stores", () => {
+    run += 1
+    from = `/moved-${run}/unopened`
+    to = `/moved-${run}/destination`
+    const childStores = new ChildStoreManager()
+    setActionRefs(childStores, () => from)
+    useGlobalSessionsStore.getState().upsertSession(session())
+    cleanups.push(() => { childStores.disposeAll(); useGlobalSessionsStore.getState().removeSessions(["ses_1"]) })
+    const routingIndex = createEventRoutingIndex()
+    handleEvent(from, movedEvents()[0], childStores, routingIndex, getRuntimeKey())
+    expect(useGlobalSessionsStore.getState().entityById.get("ses_1")?.directory).toBe(to)
+    expect(childStores.getChild(from)).toBeUndefined()
+    expect(childStores.getChild(to)).toBeUndefined()
+  })
+
+  test("the current chat follows its destination and project without selecting a different session", () => {
+    const { receive } = setup()
+    const ui = useSessionUIStore.getState()
+    const projects = useProjectsStore.getState()
+    const directory = useDirectoryStore.getState()
+    const display = useSessionDisplayStore.getState()
+    const sdkDirectory = opencodeClient.getDirectory()
+    cleanups.push(() => {
+      useSessionUIStore.setState(ui, true); useProjectsStore.setState(projects, true)
+      useDirectoryStore.setState(directory, true); useSessionDisplayStore.setState(display, true)
+      opencodeClient.setDirectory(sdkDirectory)
+    })
+    useProjectsStore.setState({ projects: [{ id: "old", path: from }, { id: "new", path: to }], activeProjectId: "old" })
+    useSessionUIStore.setState({ currentSessionId: "ses_1", currentSessionDirectory: from, newSessionDraft: { ...ui.newSessionDraft, open: false } })
+    receive(from, movedEvents()[0])
+    expect(useSessionUIStore.getState().currentSessionId).toBe("ses_1")
+    expect(useSessionUIStore.getState().currentSessionDirectory).toBe(to)
+    expect(useDirectoryStore.getState().currentDirectory).toBe(to)
+    expect(opencodeClient.getDirectory()).toBe(to)
+    expect(useProjectsStore.getState().activeProjectId).toBe("new")
+    expect(useSessionDisplayStore.getState().singleProjectId).toBe("new")
+  })
+
+  test("the current chat follows a move before its source directory store has loaded", () => {
+    run += 1
+    from = `/moved-${run}/unloaded-current`
+    to = `/moved-${run}/destination`
+    const childStores = new ChildStoreManager()
+    const ui = useSessionUIStore.getState()
+    const projects = useProjectsStore.getState()
+    const directory = useDirectoryStore.getState()
+    const display = useSessionDisplayStore.getState()
+    const sdkDirectory = opencodeClient.getDirectory()
+    cleanups.push(() => {
+      childStores.disposeAll(); useGlobalSessionsStore.getState().removeSessions(["ses_1"])
+      useSessionUIStore.setState(ui, true); useProjectsStore.setState(projects, true)
+      useDirectoryStore.setState(directory, true); useSessionDisplayStore.setState(display, true)
+      opencodeClient.setDirectory(sdkDirectory)
+    })
+    setActionRefs(childStores, () => from)
+    useGlobalSessionsStore.getState().upsertSession(session())
+    useProjectsStore.setState({ projects: [{ id: "old", path: from }, { id: "new", path: to }], activeProjectId: "old" })
+    useSessionUIStore.setState({ currentSessionId: "ses_1", currentSessionDirectory: from, newSessionDraft: { ...ui.newSessionDraft, open: false } })
+    useDirectoryStore.setState({ currentDirectory: from })
+    opencodeClient.setDirectory(from)
+
+    handleEvent(from, movedEvents()[0], childStores, createEventRoutingIndex(), getRuntimeKey())
+
+    expect(useSessionUIStore.getState().currentSessionId).toBe("ses_1")
+    expect(useSessionUIStore.getState().currentSessionDirectory).toBe(to)
+    expect(useDirectoryStore.getState().currentDirectory).toBe(to)
+    expect(opencodeClient.getDirectory()).toBe(to)
+    expect(useProjectsStore.getState().activeProjectId).toBe("new")
+    expect(useSessionDisplayStore.getState().singleProjectId).toBe("new")
+    expect(childStores.getChild(from)).toBeUndefined()
+    expect(childStores.getChild(to)).toBeUndefined()
+  })
+
+  test("moving a background chat leaves a no-project draft and current directory alone", () => {
+    const { receive } = setup()
+    const ui = useSessionUIStore.getState()
+    const projects = useProjectsStore.getState()
+    const directory = useDirectoryStore.getState()
+    const sdkDirectory = opencodeClient.getDirectory()
+    cleanups.push(() => {
+      useSessionUIStore.setState(ui, true); useProjectsStore.setState(projects, true)
+      useDirectoryStore.setState(directory, true); opencodeClient.setDirectory(sdkDirectory)
+    })
+    const draft = { ...ui.newSessionDraft, open: true }
+    useProjectsStore.setState({ activeProjectId: null })
+    useSessionUIStore.setState({ currentSessionId: null, currentSessionDirectory: "/draft", newSessionDraft: draft })
+    useDirectoryStore.setState({ currentDirectory: "/draft" })
+    opencodeClient.setDirectory("/draft")
+    receive(from, movedEvents()[0])
+    expect(useSessionUIStore.getState().newSessionDraft).toBe(draft)
+    expect(useSessionUIStore.getState().currentSessionId).toBeNull()
+    expect(useDirectoryStore.getState().currentDirectory).toBe("/draft")
+    expect(opencodeClient.getDirectory()).toBe("/draft")
+    expect(useProjectsStore.getState().activeProjectId).toBeNull()
+  })
+
   test("carries the session and its transcript to the destination store", () => {
     const { source, destination, receive } = setup()
 

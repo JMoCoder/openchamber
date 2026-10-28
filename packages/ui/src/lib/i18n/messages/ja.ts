@@ -43,6 +43,8 @@ import { sessionReferencesI18n } from './session-references.i18n';
 import { guestStatusViewI18n } from './guest-status-view.i18n';
 
 export const dict: Record<I18nKey, string> = {
+  'sessions.sidebar.moveProject.failed': 'セッションは {path} に移動しましたが、フォルダーをサイドバーに追加できませんでした。手動で追加するか、再試行してください。',
+  'sessions.sidebar.moveProject.retry': '再試行',
   "opencodeCompatibility.bundled": "OpenCode は OpenChamber に同梱されています。OpenCode v2 を利用するには OpenChamber を更新してください。",
   "opencodeCompatibility.title": "OpenCode v2 が必要です",
   "opencodeCompatibility.outdatedTitle": "OpenCode を更新してください",

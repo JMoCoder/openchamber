@@ -575,6 +575,9 @@ if (vscodeWorkspace) {
   cacheProjects(effectiveInitialProjects, initialActiveProjectId);
 }
 
+let projectNavigationRevision = 0;
+export const getProjectNavigationRevision = () => projectNavigationRevision;
+
 export const useProjectsStore = create<ProjectsStore>()(
   devtools((set, get) => ({
     projects: effectiveInitialProjects,
@@ -784,6 +787,7 @@ export const useProjectsStore = create<ProjectsStore>()(
         return;
       }
 
+      projectNavigationRevision += 1;
       const now = Date.now();
       const nextProjects = projects.map((project) =>
         project.id === id ? { ...project, lastOpenedAt: now } : project
@@ -808,6 +812,7 @@ export const useProjectsStore = create<ProjectsStore>()(
         return;
       }
 
+      projectNavigationRevision += 1;
       set({ activeProjectId: id });
       cacheActiveProjectId(id);
       void updateDesktopSettings({ activeProjectId: id });
@@ -1062,7 +1067,7 @@ export const useProjectsStore = create<ProjectsStore>()(
       // window's active project stays its own while it remains valid.
       const nextActive = adoptActiveProject
         ? incomingActive
-        : (current.activeProjectId && incomingIds.has(current.activeProjectId)
+        : (current.activeProjectId === null || incomingIds.has(current.activeProjectId)
           ? current.activeProjectId
           : incomingActive);
 
@@ -1082,7 +1087,7 @@ export const useProjectsStore = create<ProjectsStore>()(
         const activeProject = incomingProjects.find((project) => project.id === nextActive);
         if (activeProject) {
           opencodeClient.setDirectory(activeProject.path);
-          useDirectoryStore.getState().setDirectory(activeProject.path, { showOverlay: false });
+          useDirectoryStore.getState().setDirectory(activeProject.path, { showOverlay: false, source: adoptActiveProject ? 'bootstrap' : 'navigation' });
         }
       }
     },

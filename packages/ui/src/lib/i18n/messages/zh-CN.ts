@@ -43,6 +43,8 @@ import { sessionReferencesI18n } from './session-references.i18n';
 import { guestStatusViewI18n } from './guest-status-view.i18n';
 
 export const dict: Record<I18nKey, string> = {
+  'sessions.sidebar.moveProject.failed': '会话已移到 {path}，但未能将目录加入侧栏。请手动添加或重试。',
+  'sessions.sidebar.moveProject.retry': '重试',
   "opencodeCompatibility.bundled": "OpenCode 随 OpenChamber 一起提供。请更新 OpenChamber 以获取 OpenCode v2。",
   "opencodeCompatibility.title": "需要 OpenCode v2",
   "opencodeCompatibility.outdatedTitle": "请更新 OpenCode",

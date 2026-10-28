@@ -42,6 +42,8 @@ import { sessionReferencesI18n } from './session-references.i18n';
 import { guestStatusViewI18n } from './guest-status-view.i18n';
 
 export const dict = {
+  'sessions.sidebar.moveProject.failed': 'De sessie is verplaatst naar {path}, maar de map kon niet aan de zijbalk worden toegevoegd. Voeg deze handmatig toe of probeer het opnieuw.',
+  'sessions.sidebar.moveProject.retry': 'Opnieuw proberen',
   "opencodeCompatibility.bundled": "OpenCode is inbegrepen bij OpenChamber. Werk OpenChamber bij om OpenCode v2 te krijgen.",
   "opencodeCompatibility.title": "OpenCode v2 vereist",
   "opencodeCompatibility.outdatedTitle": "OpenCode bijwerken",

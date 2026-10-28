@@ -80,6 +80,7 @@ import { createOpenCodeTrust } from './lib/opencode-trust/index.js';
 import { guardOpenCodeFetch } from './lib/opencode-trust/fetch-guard.js';
 import { createStaticRoutesRuntime } from './lib/opencode/static-routes-runtime.js';
 import { createSettingsRuntime } from './lib/opencode/settings-runtime.js';
+import { createSessionMoveProjects, registerSessionMoveProjectRoutes } from './lib/projects/session-moves.js';
 import { createOpenCodeResolutionRuntime } from './lib/opencode/opencode-resolution-runtime.js';
 import { runOpenCodeCliUpgrade } from './lib/opencode/cli-upgrade.js';
 import { resolveOpenCodeUpgradeCapability } from './lib/opencode/upgrade-capability.js';
@@ -2119,6 +2120,18 @@ const openChamberControlService = createOpenChamberControlService({
   archiveStore: openChamberSessionService.archiveStore,
 });
 
+const sessionMoveProjects = createSessionMoveProjects({
+  fsPromises,
+  validateDirectoryPath,
+  persistProjectRegistration: settingsRuntime.persistProjectRegistration,
+  listWorktrees: getWorktrees,
+  excludedRoots: [path.join(OPENCHAMBER_USER_CONFIG_ROOT, 'chats'), OPENCHAMBER_CHATS_DIR, path.join(OPENCHAMBER_DATA_DIR, 'spaces')],
+  isSessionArchived: (sessionId) => openChamberSessionService.sessionArchive.isArchived(sessionId),
+  resolveSessionDirectory: async (sessionId) => (await openCodeSessionClient().session.get({ sessionID: sessionId })).location.directory,
+  broadcastUiEvent: broadcastOpenChamberUiEvent,
+});
+globalMessageStreamHub.subscribeEvent((event) => { void sessionMoveProjects.accept(event); });
+
 const ensureGlobalWatcherStarted = async () => {
   if (globalWatcherStartPromise) {
     return globalWatcherStartPromise;
@@ -2782,6 +2795,7 @@ async function main(options = {}) {
     logger: console,
   });
 
+  registerSessionMoveProjectRoutes(app, sessionMoveProjects);
   await featureRoutesRuntime.registerRoutes(app, {
     environmentStore,
     environmentRuntime,

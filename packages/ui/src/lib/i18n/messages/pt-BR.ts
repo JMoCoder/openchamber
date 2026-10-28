@@ -43,6 +43,8 @@ import { sessionReferencesI18n } from './session-references.i18n';
 import { guestStatusViewI18n } from './guest-status-view.i18n';
 
 export const dict: Record<I18nKey, string> = {
+  'sessions.sidebar.moveProject.failed': 'A sessão foi movida para {path}, mas não foi possível adicionar a pasta à barra lateral. Adicione-a manualmente ou tente novamente.',
+  'sessions.sidebar.moveProject.retry': 'Tentar novamente',
   "opencodeCompatibility.bundled": "O OpenCode está incluído no OpenChamber. Atualize o OpenChamber para obter o OpenCode v2.",
   "opencodeCompatibility.title": "OpenCode v2 necessário",
   "opencodeCompatibility.outdatedTitle": "Atualize o OpenCode",

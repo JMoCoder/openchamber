@@ -54,6 +54,7 @@ import { upsertSessionRecord } from "./session-records"
 import {
   applySessionEventToGlobalSessions,
   applySessionEventsToGlobalSessions,
+  type SessionDirectoryMove,
 } from "./session-event-router"
 import { shouldConsumeBulkArchiveEcho } from "./bulk-archive-echo"
 import { applyForkedSession, noteForkedSessionPatched } from "./forked-session"
@@ -78,6 +79,7 @@ import { subscribePrWatchSync } from "./pr-watch-sync"
 import { subscribeSessionWarmingSync } from "./session-warming-sync"
 import { subscribeSessionFoldersSync } from "./session-folders-sync"
 import { subscribeSessionDraftsSync } from "./session-drafts-sync"
+import { subscribeSessionMoveProjects } from "./session-move-projects"
 import { subscribePermissionPolicySync, subscribeSpacePermissionModes } from "./permission-mode-sync"
 import { spaceFoldersOfProject, subscribeSpaceCatalogs } from "./space-catalog-sync"
 import { subscribeSpaceSessionProject } from "./space-session-project"
@@ -279,7 +281,12 @@ function useLiveSyncSelector<T>(
 // once and each touched top-level slice is cloned at most once per flush.
 // ---------------------------------------------------------------------------
 
-type SessionMove = { sessionID: string; from: string; to: string }
+const followCurrentSessionMove = ({ sessionID, to }: SessionDirectoryMove): void => {
+  const ui = useSessionUIStore.getState()
+  if (ui.currentSessionId === sessionID && normalizePath(ui.currentSessionDirectory) !== to) {
+    ui.setSessionDirectory(sessionID, to)
+  }
+}
 
 type DirectoryEventBatch = {
   states: Map<StoreApi<DirectoryStore>, DirectoryStore>
@@ -288,7 +295,7 @@ type DirectoryEventBatch = {
   globalSessionEvents: SyncEvent[]
   globalStatusEventsByDirectory: Map<string, SyncEvent[]>
   /** Applied after the stores publish: a move reads and writes both stores directly. */
-  sessionMoves: SessionMove[]
+  sessionMoves: SessionDirectoryMove[]
 }
 
 const createDirectoryEventBatch = (): DirectoryEventBatch => ({
@@ -306,7 +313,7 @@ const getDirectoryEventState = (
 ): DirectoryStore => batch?.states.get(store) ?? store.getState()
 
 const publishDirectoryEventBatch = (batch: DirectoryEventBatch): void => {
-  applySessionEventsToGlobalSessions(batch.globalSessionEvents)
+  const globalMoves = applySessionEventsToGlobalSessions(batch.globalSessionEvents)
   for (const [directory, events] of batch.globalStatusEventsByDirectory) {
     // Before statuses: an idle that follows a command's start in the same
     // flush must see the command.
@@ -321,6 +328,7 @@ const publishDirectoryEventBatch = (batch: DirectoryEventBatch): void => {
     store.setState(state)
   }
   for (const move of batch.sessionMoves) adoptSessionMove(move.sessionID, move.from, move.to)
+  for (const move of globalMoves) followCurrentSessionMove(move)
 }
 
 /** Read status for a session across all directories */
@@ -2178,7 +2186,7 @@ export function handleEvent(
         else batch.globalStatusEventsByDirectory.set(directory, [payload])
       }
     } else {
-      applySessionEventToGlobalSessions(payload)
+      for (const move of applySessionEventToGlobalSessions(payload)) followCurrentSessionMove(move)
       // Child stores remain the primary source for synced directories; these
       // indexes cover unopened directories and list/status races.
       applyBackgroundShellEvents(directory, [payload])
@@ -2374,7 +2382,7 @@ export function handleEvent(
   const directoryBeforePatch = payload.type === "session.patched" && payload.properties.patch.directory !== undefined
     ? current.session.find((session) => session.id === payload.properties.sessionID)?.directory
     : undefined
-  let sessionMove: SessionMove | null = null
+  let sessionMove: SessionDirectoryMove | null = null
   const draft: State = { ...current }
   const clonedFields = batch?.clonedFields.get(store) ?? new Set<keyof State>()
   const newlyClonedFields: Array<keyof State> = []
@@ -3196,6 +3204,16 @@ export function SyncProvider(props: {
     const unsubscribePrWatchEvents = subscribePrWatchSync(runtimeKey)
     const unsubscribeSessionWarming = subscribeSessionWarmingSync(runtimeKey)
     const unsubscribeFolderEvents = subscribeSessionFoldersSync(runtimeKey)
+    const unsubscribeMoveProjects = subscribeSessionMoveProjects(runtimeKey, (move, retry) => {
+      const dictionary = useI18nStore.getState().dictionary
+      const id = `session-move-project:${runtimeKey}:${move.sessionId}`
+      toast.error(formatMessage(dictionary, "sessions.sidebar.moveProject.failed", { path: move.directory }), {
+        id,
+        duration: Infinity,
+        action: { label: formatMessage(dictionary, "sessions.sidebar.moveProject.retry"), onClick: retry },
+      })
+      return () => { toast.dismiss(id) }
+    })
     const unsubscribeDraftEvents = subscribeSessionDraftsSync(runtimeKey)
     const unsubscribeSpaceModes = subscribeSpacePermissionModes(runtimeKey)
     const unsubscribePermissionPolicy = subscribePermissionPolicySync(
@@ -3346,6 +3364,7 @@ export function SyncProvider(props: {
       unsubscribePrWatchEvents()
       unsubscribeSessionWarming()
       unsubscribeFolderEvents()
+      unsubscribeMoveProjects()
       unsubscribeDraftEvents()
       unsubscribeSpaceModes()
       unsubscribePermissionPolicy()

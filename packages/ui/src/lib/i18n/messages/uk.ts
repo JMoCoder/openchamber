@@ -43,6 +43,8 @@ import { sessionReferencesI18n } from './session-references.i18n';
 import { guestStatusViewI18n } from './guest-status-view.i18n';
 
 export const dict: Record<I18nKey, string> = {
+  'sessions.sidebar.moveProject.failed': 'Сеанс переміщено до {path}, але не вдалося додати його папку до бічної панелі. Додайте її вручну або повторіть спробу.',
+  'sessions.sidebar.moveProject.retry': 'Повторити',
   "opencodeCompatibility.bundled": "OpenCode входить до складу OpenChamber. Оновіть OpenChamber, щоб отримати OpenCode v2.",
   "opencodeCompatibility.title": "Потрібен OpenCode v2",
   "opencodeCompatibility.outdatedTitle": "Оновіть OpenCode",

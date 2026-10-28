@@ -42,6 +42,8 @@ import { sessionReferencesI18n } from './session-references.i18n';
 import { guestStatusViewI18n } from './guest-status-view.i18n';
 
 export const dict = {
+  'sessions.sidebar.moveProject.failed': 'Die Sitzung wurde nach {path} verschoben, aber der Ordner konnte nicht zur Seitenleiste hinzugefügt werden. Füge ihn manuell hinzu oder versuche es erneut.',
+  'sessions.sidebar.moveProject.retry': 'Erneut versuchen',
   "opencodeCompatibility.bundled": "OpenCode ist in OpenChamber enthalten. Aktualisieren Sie OpenChamber, um OpenCode v2 zu erhalten.",
   "opencodeCompatibility.title": "OpenCode v2 erforderlich",
   "opencodeCompatibility.outdatedTitle": "OpenCode aktualisieren",

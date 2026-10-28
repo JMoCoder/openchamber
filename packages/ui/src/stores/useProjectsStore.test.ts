@@ -6,6 +6,28 @@ import { useDirectoryStore } from "./useDirectoryStore"
 import { opencodeClient } from "../lib/opencode/client"
 
 describe("useProjectsStore settings synchronization", () => {
+  test("a background registration preserves no-project navigation", () => {
+    const previous = useProjectsStore.getState()
+    const directory = useDirectoryStore.getState()
+    const sdkDirectory = opencodeClient.getDirectory()
+    try {
+      useProjectsStore.setState({ projects: [], activeProjectId: null })
+      useDirectoryStore.setState({ currentDirectory: "/chats/current" })
+      opencodeClient.setDirectory("/chats/current")
+      useProjectsStore.getState().synchronizeFromSettings({
+        projects: [{ id: "new", path: "/new" }], activeProjectId: "new",
+      }, { adoptActiveProject: false })
+      expect(useProjectsStore.getState().projects.map(project => project.path)).toEqual(["/new"])
+      expect(useProjectsStore.getState().activeProjectId).toBeNull()
+      expect(useDirectoryStore.getState().currentDirectory).toBe("/chats/current")
+      expect(opencodeClient.getDirectory()).toBe("/chats/current")
+    } finally {
+      useProjectsStore.setState(previous, true)
+      useDirectoryStore.setState(directory, true)
+      opencodeClient.setDirectory(sdkDirectory)
+    }
+  })
+
   test("preserves drive roots and deduplicates Windows drive/separator variants", () => {
     const previous = useProjectsStore.getState()
     const directoryState = useDirectoryStore.getState()

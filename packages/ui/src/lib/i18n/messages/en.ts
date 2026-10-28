@@ -42,6 +42,8 @@ import { sessionReferencesI18n } from './session-references.i18n';
 import { guestStatusViewI18n } from './guest-status-view.i18n';
 
 export const dict = {
+  'sessions.sidebar.moveProject.failed': 'The session moved to {path}, but its folder could not be added to the sidebar. Add it manually or retry.',
+  'sessions.sidebar.moveProject.retry': 'Retry',
   "opencodeCompatibility.bundled": "OpenCode is bundled with OpenChamber. Update OpenChamber to get OpenCode v2.",
   "opencodeCompatibility.title": "OpenCode v2 required",
   "opencodeCompatibility.outdatedTitle": "Update OpenCode",

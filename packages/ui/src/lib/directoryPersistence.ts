@@ -39,6 +39,6 @@ export const applyPersistedDirectoryPreferences = async (): Promise<void> => {
     }
     // Authentication and transport failures are unknown, so keep the saved
     // choice until the host can confirm that the directory is gone.
-    useDirectoryStore.getState().setDirectory(savedDirectory, { showOverlay: false });
+    useDirectoryStore.getState().setDirectory(savedDirectory, { showOverlay: false, source: 'bootstrap' });
   }
 };

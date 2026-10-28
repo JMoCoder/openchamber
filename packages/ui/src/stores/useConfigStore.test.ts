@@ -138,6 +138,7 @@ mock.module('@/stores/utils/safeStorage', () => ({
 }));
 
 mock.module('@/stores/useProjectsStore', () => ({
+  getProjectNavigationRevision: () => 0,
   useProjectsStore: {
     getState: () => projectsState,
   },
@@ -207,6 +208,7 @@ mock.module('@/lib/runtime-fetch', () => ({
 }));
 
 mock.module('@/lib/persistence', () => ({
+  syncDesktopSettings: mock(async () => undefined),
   updateDesktopSettings: mock(async () => ({ ok: true })),
   reportSettingsSaveState: () => undefined,
   // The store reads the shared document through this; an empty document

@@ -498,6 +498,13 @@ ConPTY or Console Window Host behavior.
   - `readSettingsFromDiskMigrated()`
   - `writeSettingsToDisk(settings)`
   - `persistSettings(changes)`
+  - `persistProjectRegistration(resolveProject)`: resolves an optional append
+    against the latest registry inside the same settings write queue. It reads
+    the instance document strictly and writes only that file, preserving its
+    other keys, existing entries and absent navigation pointers. It neither
+    revalidates unrelated project paths nor writes profile preferences. Invalid
+    settings or a failed atomic write rejects the append without reporting it
+    as registered; later queued writes can still run.
 - Persistent per-session permission modes are stored under `permissionAutoAccept`, and the mode for new sessions under `permissionDefaultMode`; execution ownership lives in `lib/permission-auto-accept/`.
 - Queued follow-up messages live in `<data-dir>/message-queue.json`, not in settings; execution ownership lives in `lib/message-queue/`.
 - Shared sidebar preferences are stored as validated top-level fields: `sidebarProjectDisplayMode`, `sidebarSessionGroupingMode`, `sidebarListSessionGrouping`, `sidebarProjectSortOrder`, `sidebarShowChatsSection`, `sidebarShowWorkSection`, `sidebarShowPinnedSection`, `sidebarDetailedZoneRows`, and `sidebarWorktreeNameByBranch`. Device-local picker selection and sticky-header state do not enter either settings file.

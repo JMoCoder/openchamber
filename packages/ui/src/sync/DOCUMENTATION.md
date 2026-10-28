@@ -270,6 +270,35 @@ assistant message open. The translator emits nothing for it, so the session
 stays as it was until the reconnect status snapshot or the watchdog poll
 reports the authoritative state.
 
+## Moved session projects
+
+`session-move-projects.ts` refreshes the shared project registry on subscription,
+when the server announces a confirmed move, and when the control stream reconnects. The
+service registers host destinations independently of loaded directory stores.
+Each control-triggered sync requests a fresh settings read. A warm cache or a
+GET started before registration cannot stand in for the changed registry.
+The client adopts settings without adopting another window's active project,
+then reconciles the owner of the current moved chat. Background moves leave
+navigation and drafts alone. VS Code keeps its workspace-folder boundary and
+does not subscribe to host project registration.
+
+Registry arrival completes an unresolved foreground owner only while that same
+chat and directory remain selected. Historical successful moves do not replay
+navigation, and delayed registration preserves a newer manual sidebar filter.
+The session UI store owns that one pending foreground navigation, including its
+runtime and navigation revisions. The control subscriber can complete it;
+reading a historical move cannot create another navigation intent.
+
+The global session patch owner reports live directory changes even without a
+source child store. The event pipeline follows the current session after a
+batch publishes. Loaded directory stores still own transcript migration;
+unopened background directories need no bootstrap.
+
+Registration failures are read from the service's process-local move snapshot,
+including after a client was closed. A failure notice names the destination and
+offers a guarded retry; successful moves are quiet. Transport failures preserve
+the last registry. Runtime changes dispose notices and reject old continuations.
+
 ## Session list rules
 
 Opening a new draft applies its configured model identifier immediately, then

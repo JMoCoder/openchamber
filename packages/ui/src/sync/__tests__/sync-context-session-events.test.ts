@@ -12,7 +12,7 @@ let runtimeWillChange: (() => void) | null = null
 mock.module("@/stores/useGlobalSessionsStore", () => ({
   mergeSessionDirectoryMetadata: (session: Session) => session,
   isGlobalSessionRecencyOnlyUpdate: (existing: Session, incoming: Session) => (
-    existing.title === incoming.title && existing.time?.updated !== incoming.time?.updated
+    existing.title === incoming.title && existing.directory === incoming.directory && existing.time?.updated !== incoming.time?.updated
   ),
   useGlobalSessionsStore: {
     getState: () => ({
@@ -170,6 +170,29 @@ describe("applySessionEventToGlobalSessions", () => {
 
     expect(mutationCalls).toBe(1)
     expect(upsertedSessions).toHaveLength(1_000)
+  })
+
+  test("reports only the latest directory move per session in an ordered batch", () => {
+    currentSessions = [{ ...buildSession("Moving", { created: 1, updated: 10 }), directory: "/source" }]
+    const events: SyncEvent[] = [
+      { type: "session.patched", properties: { sessionID: "ses_1", patch: { directory: "/first", time: { updated: 20 } } } },
+      { type: "session.patched", properties: { sessionID: "ses_1", patch: { directory: "/latest", time: { updated: 30 } } } },
+      { type: "session.patched", properties: { sessionID: "ses_1", patch: { directory: "/latest", time: { updated: 30 } } } },
+      { type: "session.patched", properties: { sessionID: "ses_1", patch: { directory: "/stale", time: { updated: 15 } } } },
+    ]
+    expect(applySessionEventsToGlobalSessions(events)).toEqual([{ sessionID: "ses_1", from: "/source", to: "/latest" }])
+    expect(upsertedSessions.at(-1)?.directory).toBe("/latest")
+    expect(mutationCalls).toBe(1)
+  })
+
+  test("does not report a move for a session deleted later in the batch", () => {
+    currentSessions = [{ ...buildSession("Moving", { created: 1, updated: 10 }), directory: "/source" }]
+    expect(applySessionEventsToGlobalSessions([
+      { type: "session.patched", properties: { sessionID: "ses_1", patch: { directory: "/destination", time: { updated: 20 } } } },
+      buildDeleteEvent("ses_1"),
+    ])).toEqual([])
+    expect(removedSessionIds).toEqual(["ses_1"])
+    expect(mutationCalls).toBe(1)
   })
 
   test("consumes only the matching bulk archive echo", () => {

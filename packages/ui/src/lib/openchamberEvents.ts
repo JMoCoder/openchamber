@@ -261,6 +261,7 @@ type OpenChamberEvent =
   | ProjectContextChangedEvent
   | SessionFoldersChangedEvent
   | SessionDraftsChangedEvent
+  | { type: 'session-move-projects-changed' }
   | AgentMemoryChangedEvent;
 type Listener = (event: OpenChamberEvent) => void;
 
@@ -564,6 +565,11 @@ const dispatchFromEnvelope = (envelope: { type: string; properties: unknown }) =
   if (envelope.type === 'openchamber:project-context-changed') {
     const parsed = projectContextChangedSchema.safeParse(envelope.properties);
     if (parsed.success) for (const listener of listeners) listener({ type: 'project-context-changed', ...parsed.data });
+    return;
+  }
+
+  if (envelope.type === 'openchamber:session-move-projects') {
+    for (const listener of listeners) listener({ type: 'session-move-projects-changed' });
     return;
   }
 

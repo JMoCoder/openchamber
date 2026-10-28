@@ -1238,6 +1238,37 @@ describe('updateDesktopSettings', () => {
     expect(saveCalls).toEqual([{ fontSize: 16 }]);
   });
 
+  test('a control-triggered fresh sync bypasses a warm cached project registry', async () => {
+    let projects = [{ id: 'source', path: '/source' }];
+    let reads = 0;
+    registerSettingsApi(async changes => changes, async () => {
+      reads += 1;
+      return { settings: { projects }, source: 'web' };
+    });
+    await loadDesktopSettings();
+    projects = [...projects, { id: 'destination', path: '/destination' }];
+    await syncDesktopSettings({ bootstrap: false, fresh: true });
+    expect((await loadDesktopSettings())?.projects?.map(project => project.path)).toEqual(['/source', '/destination']);
+    expect(reads).toBe(2);
+  });
+
+  test('a fresh sync waits out an older in-flight registry read then reads current authority', async () => {
+    const old = deferred<{ settings: SettingsPayload; source: 'web' }>();
+    const projects = [{ id: 'destination', path: '/destination' }];
+    let reads = 0;
+    registerSettingsApi(async changes => changes, () => ++reads === 1
+      ? old.promise : Promise.resolve({ settings: { projects }, source: 'web' }));
+    const earlier = loadDesktopSettings();
+    const fresh = syncDesktopSettings({ bootstrap: false, fresh: true });
+    await delay(0);
+    expect(reads).toBe(1);
+    old.resolve({ settings: { projects: [] }, source: 'web' });
+    await earlier;
+    await fresh;
+    expect((await loadDesktopSettings())?.projects?.map(project => project.path)).toEqual(['/destination']);
+    expect(reads).toBe(2);
+  });
+
   test('reconciles warm cached reads with pending and in-flight settings writes', async () => {
     const saveResult = deferred<SettingsPayload>();
     const savedSettings = { defaultModel: 'provider/new-model' } satisfies SettingsPayload;

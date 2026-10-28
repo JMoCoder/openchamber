@@ -619,7 +619,7 @@ export const invalidateSettingsCache = (): void => {
   _serverKnownSettings = {};
 };
 
-export const syncDesktopSettings = async (options?: { bootstrap?: boolean; adoptTheme?: boolean }): Promise<void> => {
+export const syncDesktopSettings = async (options?: { bootstrap?: boolean; adoptTheme?: boolean; fresh?: boolean }): Promise<void> => {
   const bootstrap = options?.bootstrap !== false;
   const adoptTheme = options?.adoptTheme ?? bootstrap;
   if (typeof window === 'undefined') {
@@ -627,6 +627,16 @@ export const syncDesktopSettings = async (options?: { bootstrap?: boolean; adopt
   }
   ensureSettingsRuntimeLifecycle();
   const context = captureSettingsRuntimeContext();
+  if (options?.fresh) {
+    // A control event names a newer server document. An earlier in-flight GET
+    // may still hold the old registry, so let it settle before reading again.
+    const previous = _settingsInflight;
+    if (previous && isSameSettingsRuntimeContext(previous.context, context)) {
+      await previous.promise.catch(() => null);
+    }
+    if (!isSettingsRuntimeContextCurrent(context)) return;
+    _settingsCache = null;
+  }
   const operation = _settingsMutationTracker.begin();
 
   const persistApis = [getPersistApi(), useSessionDisplayStore.persist];

@@ -23,11 +23,11 @@ import { buildSkillMentionInstruction } from "@/lib/skillMentionInstruction"
 import { runtimeFetch } from "@/lib/runtime-fetch"
 import { useConfigStore } from "@/stores/useConfigStore"
 import { runAfterOpenCodeStartup } from "./opencode-startup-gate"
-import { useProjectsStore } from "@/stores/useProjectsStore"
-import { useSessionDisplayStore } from "@/stores/useSessionDisplayStore"
+import { getProjectNavigationRevision, useProjectsStore } from "@/stores/useProjectsStore"
+import { getSidebarProjectNavigationRevision, useSessionDisplayStore } from "@/stores/useSessionDisplayStore"
 import { syncSessionKnowledge } from "@/lib/sessionKnowledgeApi"
 import { useGlobalSessionsStore, resolveGlobalSessionDirectory } from "@/stores/useGlobalSessionsStore"
-import { isDirectoryUnknown, useDirectoryStore } from "@/stores/useDirectoryStore"
+import { getDirectoryNavigationRevision, isDirectoryUnknown, useDirectoryStore } from "@/stores/useDirectoryStore"
 import { useSessionFoldersStore } from "@/stores/useSessionFoldersStore"
 import { useSessionTabsStore } from "@/stores/useSessionTabsStore"
 import { selectCommandsForDirectory, useCommandsStore } from "@/stores/useCommandsStore"
@@ -573,6 +573,7 @@ export type SessionUIState = {
   debugSessionMessages: (sessionId: string) => Promise<void>
   pollForTokenUpdates: () => void
   setSessionDirectory: (sessionId: string, directory: string | null) => void
+  reconcileSessionMoveProject: (sessionId: string, directory: string) => void
   /**
    * Replace a guessed selection directory with the authoritative one once sync
    * has indexed the session. Safe to call at any time: it only ever promotes a
@@ -690,6 +691,14 @@ export const getRememberedSessionDirectory = (sessionId: string): {
  * a guess, not a selection.
  */
 let guessedSelectionSessionId: string | null = null
+let pendingSessionProject: {
+  runtimeKey: string
+  sessionId: string
+  directory: string
+  projectRevision: number
+  directoryRevision: number
+  sidebarRevision: number
+} | null = null
 
 const collectSessionDirectorySources = (
   sessionId: string,
@@ -1438,6 +1447,7 @@ export const useSessionUIStore = create<SessionUIState>()((set, get) => ({
   // setCurrentSession
   // ---------------------------------------------------------------------------
   setCurrentSession: (id, directoryHint?: string | null, transition?: "submitted-draft") => {
+    pendingSessionProject = null
     const materializedDraftSessionId = id && transition === "submitted-draft" ? id : null
     // Publish the transition identity before closing the draft. Those are two
     // separate store updates, and ChatContainer must never observe a closed
@@ -1517,6 +1527,12 @@ export const useSessionUIStore = create<SessionUIState>()((set, get) => ({
       console.warn("Failed to set OpenCode directory for session switch:", e)
     }
 
+    if (id && resolvedDir && !isGuessedDir && !sessionProject) {
+      pendingSessionProject = { runtimeKey: key, sessionId: id, directory: resolvedDir,
+        projectRevision: getProjectNavigationRevision(), directoryRevision: getDirectoryNavigationRevision(), sidebarRevision: getSidebarProjectNavigationRevision() }
+      get().reconcileSessionMoveProject(id, resolvedDir)
+    }
+
     // Defer viewport anchor save for previous session — not needed for the
     // skeleton to render and reads messages which can be expensive.
     if (previousSessionId && previousSessionId !== id) {
@@ -1582,6 +1598,7 @@ export const useSessionUIStore = create<SessionUIState>()((set, get) => ({
   },
 
   restoreForRuntimeSwitch: (apiBaseUrl?: string | null, previousRuntimeKey?: string | null) => {
+    pendingSessionProject = null
     const key = runtimeMemoryKey(apiBaseUrl)
     const memory = runtimeSessionMemory.get(key)
     const restoredSessionId = memory?.sessionId ?? activeSessionByRuntime.get(key) ?? null
@@ -1630,6 +1647,7 @@ export const useSessionUIStore = create<SessionUIState>()((set, get) => ({
     // auto-draft at boot), which must NOT consume the pointer — the cold-launch
     // restore races exactly that auto-open.
     if (!options?.automatic) {
+      pendingSessionProject = null
       clearLastActiveSession(runtimeMemoryKey())
     }
     const projectsState = useProjectsStore.getState()
@@ -2734,10 +2752,48 @@ export const useSessionUIStore = create<SessionUIState>()((set, get) => ({
       guessedSelectionSessionId = null
     }
     if (sessionId === get().currentSessionId) {
+      const directoryChanged = normalizePath(get().currentSessionDirectory) !== normalized
       set({ currentSessionDirectory: normalized })
       setActiveSession(normalized ?? "", sessionId)
       writeRuntimeSessionMemory(runtimeMemoryKey(), { sessionId, directory: normalized })
+      if (normalized && !get().newSessionDraft.open) {
+        if (directoryChanged) {
+          opencodeClient.setDirectory(normalized)
+          if (useDirectoryStore.getState().currentDirectory !== normalized) {
+            useDirectoryStore.getState().setDirectory(normalized, { showOverlay: false })
+          }
+          pendingSessionProject = { runtimeKey: runtimeMemoryKey(), sessionId, directory: normalized,
+            projectRevision: getProjectNavigationRevision(), directoryRevision: getDirectoryNavigationRevision(), sidebarRevision: getSidebarProjectNavigationRevision() }
+        }
+        get().reconcileSessionMoveProject(sessionId, normalized)
+      } else {
+        pendingSessionProject = null
+      }
     }
+  },
+
+  reconcileSessionMoveProject: (sessionId, directory) => {
+    const pending = pendingSessionProject
+    if (!pending || pending.sessionId !== sessionId || pending.directory !== normalizePath(directory)) return
+    const state = get()
+    if (pending.runtimeKey !== runtimeMemoryKey() || state.currentSessionId !== sessionId || state.newSessionDraft.open
+      || normalizePath(state.currentSessionDirectory) !== pending.directory
+      || getDirectoryNavigationRevision() !== pending.directoryRevision || getProjectNavigationRevision() !== pending.projectRevision) {
+      pendingSessionProject = null
+      return
+    }
+    const projects = useProjectsStore.getState()
+    const project = resolveProjectForSessionDirectory(projects.projects, state.availableWorktreesByProject, pending.directory)
+    if (!project) return
+    // Consume the foreground navigation once. A later registry refresh cannot
+    // replay it over a manual project/filter choice or another conversation.
+    pendingSessionProject = null
+    const display = useSessionDisplayStore.getState()
+    if (normalizePath(useDirectoryStore.getState().currentDirectory) !== pending.directory) {
+      useDirectoryStore.getState().setDirectory(pending.directory, { showOverlay: false })
+    }
+    projects.setActiveProjectIdOnly(project.id)
+    if (getSidebarProjectNavigationRevision() === pending.sidebarRevision) display.setSingleProjectId(project.id)
   },
 }))
 

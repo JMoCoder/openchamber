@@ -42,6 +42,8 @@ import { sessionReferencesI18n } from './session-references.i18n';
 import { guestStatusViewI18n } from './guest-status-view.i18n';
 
 export const dict = {
+  'sessions.sidebar.moveProject.failed': 'השיחה הועברה אל {path}, אך לא ניתן היה להוסיף את התיקייה לסרגל הצד. יש להוסיף אותה ידנית או לנסות שוב.',
+  'sessions.sidebar.moveProject.retry': 'ניסיון נוסף',
   'opencodeCompatibility.bundled': 'OpenCode מגיע יחד עם OpenChamber. יש לעדכן את OpenChamber כדי לקבל את OpenCode v2.',
   'opencodeCompatibility.title': 'נדרש OpenCode v2',
   'opencodeCompatibility.outdatedTitle': 'עדכן את OpenCode',

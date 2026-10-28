@@ -42,6 +42,8 @@ import { sessionReferencesI18n } from './session-references.i18n';
 import { guestStatusViewI18n } from './guest-status-view.i18n';
 
 export const dict = {
+  'sessions.sidebar.moveProject.failed': "La session a été déplacée vers {path}, mais son dossier n'a pas pu être ajouté à la barre latérale. Ajoutez-le manuellement ou réessayez.",
+  'sessions.sidebar.moveProject.retry': 'Réessayer',
   "opencodeCompatibility.bundled": "OpenCode est inclus dans OpenChamber. Mettez OpenChamber à jour pour obtenir OpenCode v2.",
   "opencodeCompatibility.title": "OpenCode v2 requis",
   "opencodeCompatibility.outdatedTitle": "Mettre à jour OpenCode",

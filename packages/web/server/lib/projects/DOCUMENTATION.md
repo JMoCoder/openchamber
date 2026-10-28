@@ -89,6 +89,9 @@ UI (`packages/ui/src/lib/sharedTrustConfirmation.ts`).
 
 ## Modules
 
+`session-moves.js` owns registry-only registration after confirmed host moves.
+It uses the settings runtime's shared write queue and the existing global hub.
+
 - `project-id.js` — `createProjectIdFromPath` / `projectPathFromId`: the path-derived id (`path_<base64url>`) that names the file, and the checkout path back from it. The shared UI derives the same id (`packages/ui/src/lib/projectId.ts`); both sides must agree. `projectConfigFileStemOf`: the stem that names the file and the sibling folder for an id, see the file name invariant below.
 - `project-config.js` — `createProjectConfigRuntime`: raw read, atomic write, the cross-process file lock (Electron and a CLI `serve` can share one projects dir), scheduled-task normalization, and the project-setup read/update.
 - `project-setup.js` — sanitizers, the shared-file parser (`parseSharedProjectConfig`, `normalizePlansDir`), the merge (`mergeProjectSetup`), and the personal view for the setup keys. Mirrored in the VS Code extension host (`packages/vscode/src/project-setup.ts`), which owns the same file when the webview has no OpenChamber server; keep the two in sync.
@@ -100,4 +103,33 @@ UI (`packages/ui/src/lib/sharedTrustConfirmation.ts`).
 - **A wrongly shaped key is a 400, not a silent drop.** `projectSetupPatchToStored` throws; the file is untouched. Values inside a well-shaped key are sanitized (trimmed, capped, deduplicated) rather than rejected.
 - **The file name is bounded, and so is the folder beside it.** The file is `<projectId>.json` and the per-project folder is `<projectId>/` while the id is at most 200 characters. A `path_<base64url>` id grows with the checkout path, so a deeply nested project (a path of roughly 150 characters or more) would otherwise get a name beyond the 255-byte limit and every write, lock, and temp file would fail with ENAMETOOLONG. Such an id is stored as `path_sha256_<hex digest of the id>.json` instead, with the folder `path_sha256_<digest>/` beside it (`projectConfigFileStemOf`; every composer of either path goes through it: `project-config.js`, `project-context/runtime.js`, `agent-memory/runtime.js`, and the id migration and orphan recovery in `opencode/settings-runtime.js`). The digest keeps the `path_` prefix so orphan recovery skips it. A file an older build managed to write under the long name is still read when the bounded file is missing and is moved to the bounded name by the next write; a malformed one is a read failure, not an empty project. A folder an older build created under the raw id (possible only for ids of 201 to 255 characters; longer names never got one) is moved into the bounded folder once at startup, by the project id migration in `opencode/settings-runtime.js`, with `context.json` merged by entry identity when both exist. The VS Code extension host mirrors both the naming rule and the legacy read-then-move for the file (`bridge-project-setup-runtime.ts`), because a VS Code-only user has no server to do it; it never touches the folder.
 - **The client never composes the path.** `packages/ui/src/lib/openchamberConfig.ts` speaks only HTTP; the same code serves web, desktop, VS Code, and the phone, including a phone on a remote instance.
+
 - **`OPENCHAMBER_DATA_DIR` moves this directory too.** Every OpenChamber folder hangs off the one root; a custom root gets `projects/`, `themes/`, and `speech-models/` copied in from `~/.config/openchamber` once at startup (copied, not moved: a second instance beside the default one must not strip it) (`lib/data-dir-migration.js`). A scratch server started with its own data dir therefore never touches the real project configs.
+
+## Session move registration
+
+Confirmed host `session.moved` events register an unowned destination even when
+no browser is connected. Registration validates that one destination and reuses
+registered ancestors or worktree ownership. It does not create folders, run
+setup commands, or activate a project. Space events, reserved space paths,
+space archive data, archived sessions and managed chat folders are excluded.
+
+The append runs inside the settings owner's existing write queue. It keeps
+unrelated project entries, metadata and navigation pointers, and announces the
+change only after the instance settings file is saved. Normal creation, rename
+and usage events do no registration work. Duplicate and superseded moves cannot
+append a second project or restore an older destination.
+
+`GET /api/projects/session-moves` returns the latest observed move per session
+for this server process. `POST /api/projects/session-moves/retry` retries only a
+failed observed move whose session still names that destination. These routes
+use the existing authenticated project route family. Failed registration leaves
+the completed OpenCode move intact. Reconnecting clients can read its failure
+and target; successful registrations survive a server restart in settings.
+
+### Why registration belongs to the service
+
+A UI-only adoption hook runs only for loaded directory stores and connected
+clients. The service observes background moves without those stores and owns
+the shared project registry. Clients refresh it through the existing control
+stream, keeping each window's project, chat and draft selection.

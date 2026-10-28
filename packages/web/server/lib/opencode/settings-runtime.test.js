@@ -50,6 +50,60 @@ const createRuntime = async ({
 };
 
 describe('settings runtime', () => {
+  it('serializes project appends with settings saves without activating or validating old paths', async () => {
+    const { runtime, settingsFilePath, cleanup } = await createRuntime({
+      mergePersistedSettings: (current, changes) => ({ ...current, ...changes }),
+    });
+    try {
+      const entry = (name) => ({ id: createProjectIdFromPath(`/${name}`), path: `/${name}` });
+      const original = { projects: [{ ...entry('missing-but-preserved'), label: 'Label', color: 'blue' }], lastDirectory: '/chat', futureKey: 42 };
+      await fsPromises.writeFile(settingsFilePath, JSON.stringify(original));
+      const append = (name) => runtime.persistProjectRegistration(projects => projects.some(p => p.path === `/${name}`) ? null : entry(name));
+      await Promise.all([append('one'), runtime.persistSettings({ lightThemeId: 'flexoki-light' }), append('two'), append('one')]);
+      const stored = JSON.parse(await fsPromises.readFile(settingsFilePath, 'utf8'));
+      expect(stored.projects).toEqual([...original.projects, entry('one'), entry('two')]);
+      expect(stored).toMatchObject({ lastDirectory: '/chat', futureKey: 42 });
+      // The ordinary settings save can apply its existing fallback. The append
+      // itself must preserve an explicitly absent pointer, too.
+      await fsPromises.writeFile(settingsFilePath, JSON.stringify(original));
+      await append('three');
+      expect(JSON.parse(await fsPromises.readFile(settingsFilePath, 'utf8'))).toEqual({ ...original, projects: [...original.projects, entry('three')] });
+    } finally { await cleanup(); }
+  });
+
+  it('refuses registration on corrupt settings and recovers the shared write queue', async () => {
+    const { runtime, settingsFilePath, cleanup } = await createRuntime();
+    try {
+      await fsPromises.writeFile(settingsFilePath, '{broken');
+      await expect(runtime.persistProjectRegistration(() => ({ id: 'one', path: '/one' }))).rejects.toThrow();
+      expect(await fsPromises.readFile(settingsFilePath, 'utf8')).toBe('{broken');
+      await fsPromises.writeFile(settingsFilePath, '{"projects":[]}');
+      await expect(runtime.persistProjectRegistration(() => ({ id: 'one', path: '/one' }))).resolves.toBe(true);
+      expect((await runtime.readSettingsFromDisk()).projects).toEqual([{ id: 'one', path: '/one' }]);
+    } finally { await cleanup(); }
+  });
+
+  it('keeps the original registry on a failed atomic registration and allows retry', async () => {
+    let full = true;
+    const { runtime, settingsFilePath, cleanup } = await createRuntime({ fs: {
+      ...fsPromises,
+      rename: async (...args) => {
+        if (full) throw Object.assign(new Error('disk full'), { code: 'ENOSPC' });
+        return fsPromises.rename(...args);
+      },
+    } });
+    try {
+      const original = '{"projects":[],"lastDirectory":"/chat","futureKey":42}';
+      await fsPromises.writeFile(settingsFilePath, original);
+      const append = () => runtime.persistProjectRegistration(() => ({ id: 'new', path: '/new' }));
+      await expect(append()).rejects.toThrow('disk full');
+      expect(await fsPromises.readFile(settingsFilePath, 'utf8')).toBe(original);
+      full = false;
+      await expect(append()).resolves.toBe(true);
+      expect(JSON.parse(await fsPromises.readFile(settingsFilePath, 'utf8'))).toEqual({ projects: [{ id: 'new', path: '/new' }], lastDirectory: '/chat', futureKey: 42 });
+    } finally { await cleanup(); }
+  });
+
   it('reports the directory the UI moved to, once per change', async () => {
     const onLastDirectoryChanged = vi.fn();
     const { runtime, cleanup } = await createRuntime({

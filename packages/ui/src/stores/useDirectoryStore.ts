@@ -11,6 +11,9 @@ import { useFileSearchStore } from '@/stores/useFileSearchStore';
 import { streamDebugEnabled } from '@/stores/utils/streamDebug';
 import { getDeferredSafeStorage } from './utils/safeStorage';
 
+let directoryNavigationRevision = 0;
+export const getDirectoryNavigationRevision = () => directoryNavigationRevision;
+
 interface DirectoryStore {
 
   currentDirectory: string;
@@ -21,7 +24,7 @@ interface DirectoryStore {
   isHomeReady: boolean;
   isSwitchingDirectory: boolean;
 
-  setDirectory: (path: string, options?: { showOverlay?: boolean }) => void;
+  setDirectory: (path: string, options?: { showOverlay?: boolean; source?: 'navigation' | 'bootstrap' }) => void;
   goBack: () => void;
   goForward: () => void;
   goToParent: () => void;
@@ -269,8 +272,8 @@ export const useDirectoryStore = create<DirectoryStore>()(
       isHomeReady: initialIsHomeReady,
       isSwitchingDirectory: false,
 
-      setDirectory: (path: string, options?: { showOverlay?: boolean }) => {
-        void options;
+      setDirectory: (path, options) => {
+        if (options?.source !== 'bootstrap') directoryNavigationRevision += 1;
         const homeDir = cachedHomeDirectory || get().homeDirectory || safeStorage.getItem('homeDirectory');
         const resolvedPath = resolveDirectoryPath(path, homeDir);
         if (streamDebugEnabled()) {
@@ -304,6 +307,8 @@ export const useDirectoryStore = create<DirectoryStore>()(
           const newIndex = state.historyIndex - 1;
           const newDirectory = state.directoryHistory[newIndex];
 
+          directoryNavigationRevision += 1;
+
           opencodeClient.setDirectory(newDirectory);
           invalidateFileSearchCache();
 
@@ -326,6 +331,8 @@ export const useDirectoryStore = create<DirectoryStore>()(
         if (state.historyIndex < state.directoryHistory.length - 1) {
           const newIndex = state.historyIndex + 1;
           const newDirectory = state.directoryHistory[newIndex];
+
+          directoryNavigationRevision += 1;
 
           opencodeClient.setDirectory(newDirectory);
           invalidateFileSearchCache();
@@ -368,6 +375,7 @@ export const useDirectoryStore = create<DirectoryStore>()(
         // A directory opened while the lookup ran is the user's newer choice.
         if (getRuntimeKey() !== runtimeKey || get().currentDirectory !== leaving) return;
         const directory = noProjectDirectory(homeDir, chatsRoot);
+        directoryNavigationRevision += 1;
         opencodeClient.setDirectory(directory);
         invalidateFileSearchCache();
         safeStorage.removeItem('lastDirectory');

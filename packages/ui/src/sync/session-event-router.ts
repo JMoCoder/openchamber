@@ -11,6 +11,9 @@ import { getRuntimeKey, subscribeRuntimeEndpointWillChange } from "@/lib/runtime
 import { streamPerfCount, streamPerfMark } from "@/stores/utils/streamDebug"
 import { stripSessionDiffSnapshots } from "./sanitize"
 import { shouldSkipStaleSessionEvent } from "./session-event-freshness"
+import { normalizePath } from "@/lib/pathNormalization"
+
+export type SessionDirectoryMove = { sessionID: string; from: string; to: string }
 
 const pendingGlobalSessionUpdates = new Map<string, { runtimeKey: string; session: Session }>()
 
@@ -58,12 +61,13 @@ const applyPatch = (session: Session, patch: SessionPatch): Session => {
   return next
 }
 
-export const applySessionEventsToGlobalSessions = (payloads: readonly SyncEvent[]): void => {
-  if (payloads.length === 0) return
+export const applySessionEventsToGlobalSessions = (payloads: readonly SyncEvent[]): SessionDirectoryMove[] => {
+  if (payloads.length === 0) return []
   const runtimeKey = getRuntimeKey()
   const store = useGlobalSessionsStore.getState()
   const overlay = new Map(store.entityById)
   const mutations: GlobalSessionMutation[] = []
+  const directoryMoves = new Map<string, SessionDirectoryMove>()
   let flushedRecency = false
 
   const appendUpsert = (session: Session): void => {
@@ -110,6 +114,13 @@ export const applySessionEventsToGlobalSessions = (payloads: readonly SyncEvent[
       } else {
         pendingGlobalSessionUpdates.delete(sessionID)
         appendUpsert(session)
+        if (patch.directory !== undefined) {
+          const from = normalizePath(currentSession.directory)
+          const to = normalizePath(session.directory)
+          if (from && to && from !== to) {
+            directoryMoves.set(sessionID, { sessionID, from: directoryMoves.get(sessionID)?.from ?? from, to })
+          }
+        }
         streamPerfCount("ui.global_sessions.event_update_immediate")
       }
       continue
@@ -118,17 +129,19 @@ export const applySessionEventsToGlobalSessions = (payloads: readonly SyncEvent[
     if (payload.type === "session.deleted") {
       const { sessionID } = payload.properties
       pendingGlobalSessionUpdates.delete(sessionID)
+      directoryMoves.delete(sessionID)
       overlay.delete(sessionID)
       mutations.push({ type: "remove", sessionId: sessionID })
     }
   }
 
-  if (mutations.length === 0 || runtimeKey !== getRuntimeKey()) return
+  if (mutations.length === 0 || runtimeKey !== getRuntimeKey()) return []
   if (flushedRecency) streamPerfMark("global_sessions.event_update_flush")
   store.applySessionMutations(mutations)
   streamPerfCount("ui.global_sessions.event_update_publication")
+  return [...directoryMoves.values()]
 }
 
-export const applySessionEventToGlobalSessions = (payload: SyncEvent): void => {
+export const applySessionEventToGlobalSessions = (payload: SyncEvent): SessionDirectoryMove[] => (
   applySessionEventsToGlobalSessions([payload])
-}
+)

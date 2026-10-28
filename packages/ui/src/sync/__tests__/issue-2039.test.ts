@@ -156,12 +156,14 @@ mock.module("@/stores/useConfigStore", () => ({
 }))
 
 mock.module("@/stores/useProjectsStore", () => ({
+  getProjectNavigationRevision: () => 0,
   useProjectsStore: {
     getState: () => projectsState,
   },
 }))
 
 mock.module("@/stores/useDirectoryStore", () => ({
+  getDirectoryNavigationRevision: () => 0,
   isDirectoryUnknown: () => false,
   useDirectoryStore: {
     getState: () => ({

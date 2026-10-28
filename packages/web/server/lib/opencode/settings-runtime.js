@@ -1230,11 +1230,36 @@ export const createSettingsRuntime = (deps) => {
     return result;
   };
 
+  // Resolve against the registry inside the same queue as ordinary settings
+  // saves. Registration owns only an append, never activation or cleanup of
+  // other paths. Profile preferences need no write for this instance-only key.
+  const persistProjectRegistration = (resolveProject) => {
+    const result = persistSettingsLock.then(async () => {
+      const current = await readSettingsFromDiskStrict();
+      if (Array.isArray(current) || (current.projects !== undefined && !Array.isArray(current.projects))) {
+        throw new Error('Project registry is malformed');
+      }
+      const projects = sanitizeProjects(current.projects) || [];
+      const project = await resolveProject(projects);
+      if (!project) return false;
+      const [entry] = sanitizeProjects([project]) || [];
+      if (!entry) throw new Error('Project registration is invalid');
+      await writeJsonFileAtomic(SETTINGS_FILE_PATH, JSON.stringify({
+        ...current,
+        projects: [...(current.projects || []), entry],
+      }, null, 2));
+      return true;
+    });
+    persistSettingsLock = result.catch(() => {});
+    return result;
+  };
+
   return {
     readSettingsFromDisk,
     readSettingsFromDiskStrict,
     readSettingsFromDiskMigrated,
     writeSettingsToDisk,
     persistSettings,
+    persistProjectRegistration,
   };
 };
